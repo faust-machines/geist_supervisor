@@ -54,7 +54,7 @@ The command line interface is built using [clap](https://github.com/clap-rs/clap
 - `geist update <version>`: Updates all components (Geist, Roc Camera App, microcontroller firmware) to the specified version.
 - `geist verify <version>`: Verifies that all artifacts for a given version are available and valid.
 - `geist rollback <version>`: Rolls back to a previous known-good version.
-- `geist update-self`: Updates the Geist Supervisor itself to the latest version.
+- `cargo binstall roc_supervisor`: Installs the Geist Supervisor to the system.
 
 ## Directory Structure for Updates
 

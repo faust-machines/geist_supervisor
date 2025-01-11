@@ -4,6 +4,7 @@ use fs_extra::dir::CopyOptions;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tempfile;
 use tracing::info;
 
 pub struct FileService {
@@ -100,6 +101,38 @@ impl FileService {
         fs::write(&test_file, "test").context("No write permission in app directory")?;
         fs::remove_file(test_file).context("Failed to clean up test file")?;
 
+        Ok(())
+    }
+
+    pub fn rollback_to_version(&self, version: &str) -> Result<()> {
+        info!("Rolling back to version: {}", version);
+
+        // Initialize GitHub service to download the previous version
+        let github_token =
+            std::env::var("GITHUB_TOKEN").context("GITHUB_TOKEN environment variable not set")?;
+        let github = crate::services::GitHubService::new(github_token);
+
+        // Verify the version exists
+        if !github.verify_release(version)? {
+            anyhow::bail!("Release {} not found", version);
+        }
+
+        // Create temp directory and download bundle
+        let temp_dir = tempfile::tempdir()?;
+        let bundle_path = temp_dir
+            .path()
+            .join(format!("release_bundle-{}.tar.gz", version));
+
+        // Download the specified version
+        info!("Downloading version {} for rollback", version);
+        github.download_release_bundle(version, &bundle_path)?;
+
+        // Extract and update using existing methods
+        let release_dir = self.extract_bundle(&bundle_path, temp_dir.path())?;
+        self.update_binaries(&release_dir)?;
+        self.update_app(&release_dir)?;
+
+        info!("Rollback to version {} completed successfully!", version);
         Ok(())
     }
 }

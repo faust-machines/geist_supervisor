@@ -29,7 +29,7 @@ async fn run_start_command(
 ) -> Result<(), Box<dyn Error>> {
     // Existing version string logic
     let ver = version.unwrap_or_else(|| "latest".to_string());
-    let env_path = env_file_path.unwrap_or_else(|| "".to_string());
+    let env_path = env_file_path.unwrap_or_default();
 
     println!("\n");
     println!("=== Starting Geist ===");
