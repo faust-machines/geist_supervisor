@@ -9,7 +9,7 @@ pub mod topic;
 #[command(
     author,
     version,
-    about = "Geist Supervisor CLI - Manage and control Geist components",
+    about = "Roc Supervisor CLI - Manage and control your Roc Camera",
     long_about = None
 )]
 pub struct Cli {

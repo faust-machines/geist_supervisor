@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     // Initialize logging
     utils::logging::init_logging();
 
-    log::info!("Starting Geist Supervisor");
+    log::info!("Starting Roc Supervisor");
     let cli = Cli::parse();
     cli.execute()
 }

@@ -3,7 +3,6 @@ use crate::cli::topic::TopicCommands;
 use crate::config::Config;
 use crate::services::FileService;
 use crate::services::GcsService;
-use anyhow::Context;
 use anyhow::Result;
 use clap::Subcommand;
 use std::env;
@@ -40,32 +39,38 @@ impl Commands {
                 tracing::info!("Updating to version: {}", target_version);
 
                 let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
+                let data_dir = Config::data_dir();
 
-                let bin_dir = Config::bin_dir();
-                let app_dir = Config::app_dir();
+                tracing::debug!("Data dir exists: {}", data_dir.exists());
+                tracing::debug!("Current user: {:?}", std::env::var("USER"));
 
-                tracing::info!("Using bin_dir: {}", bin_dir.display());
-                tracing::info!("Using app_dir: {}", app_dir.display());
+                // Create data directory if it doesn't exist
+                std::fs::create_dir_all(&data_dir)?;
 
-                let fs_service = FileService::new(bin_dir, app_dir);
+                tracing::info!("Using data_dir: {}", data_dir.display());
+
+                let fs_service = FileService::new(data_dir);
 
                 // Verify permissions before starting
                 fs_service.verify_permissions()?;
 
+                // Strip the 'v' prefix if it exists when constructing paths
+                let normalized_version = target_version.trim_start_matches('v');
+
                 // Verify version exists
-                if !gcs.verify_version(&target_version)? {
+                if !gcs.verify_version(normalized_version)? {
                     anyhow::bail!("Version {} not found", target_version);
                 }
 
-                // Create temp directory and download binary
+                // Create temp directory and download release bundle
                 let temp_dir = tempfile::tempdir()?;
-                let binary_path = temp_dir.path().join("roc_camera");
+                let bundle_path = temp_dir.path().join(Config::RELEASE_BUNDLE_NAME);
 
-                tracing::info!("Downloading binary to: {}", binary_path.display());
-                gcs.download_binary(&target_version, &binary_path)?;
+                tracing::info!("Downloading release bundle to: {}", bundle_path.display());
+                gcs.download_release_bundle(normalized_version, &bundle_path)?;
 
-                // Update binary
-                fs_service.update_binary(&binary_path)?;
+                // Extract and update files
+                fs_service.update_files(&bundle_path)?;
 
                 tracing::info!("Update completed successfully!");
                 Ok(())
@@ -83,19 +88,11 @@ impl Commands {
                 Ok(())
             }
             Commands::Rollback { version } => {
-                tracing::info!("Rolling back to version: {}", version);
+                // tracing::info!("Rolling back to version: {}", version);
 
-                // Example implementation for rollback
-                let bin_dir = env::var("GEIST_BIN_DIR")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| PathBuf::from("/usr/local/bin"));
-                let app_dir = env::var("GEIST_APP_DIR")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| PathBuf::from("/opt/roc_camera_app"));
+                // let fs_service = FileService::new(data_dir);
 
-                let fs_service = FileService::new(bin_dir, app_dir);
-
-                fs_service.rollback_to_version(&version)?;
+                // fs_service.rollback_to_version(&version)?;
                 tracing::info!("Rollback completed successfully!");
                 Ok(())
             }

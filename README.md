@@ -1,6 +1,6 @@
-# Geist Supervisor
+# Roc Supervisor
 
-The **Geist Supervisor** is the central orchestrator for the Geist ecosystem. A Rust-based tool that manages the update process, debugging, and runtime control of the Geist and associated applications.
+The **Roc Supervisor** is the central orchestrator for the Geist ecosystem. A Rust-based tool that manages the update process, debugging, and runtime control of the Geist and associated applications.
 
 ## Key Features
 
@@ -27,7 +27,7 @@ The **Geist Supervisor** is the central orchestrator for the Geist ecosystem. A 
    - If an update is available, it requests the Geist Supervisor to handle the update.
 
 2. **Initiating Update**:
-   - The Geist Supervisor downloads all artifacts (Geist binaries, Roc Camera App binaries, microcontroller firmware) for the requested version.
+   - The Roc Supervisor downloads all artifacts (Geist binaries, Roc Camera App binaries, microcontroller firmware) for the requested version.
 
 3. **Verification**:
    - Validates the integrity of all downloaded artifacts using checksums and cryptographic signatures.
