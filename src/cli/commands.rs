@@ -1,0 +1,113 @@
+use crate::cli::node::NodeCommands;
+use crate::cli::topic::TopicCommands;
+use crate::config::Config;
+use crate::services::FileService;
+use crate::services::GcsService;
+use anyhow::Result;
+use clap::Subcommand;
+use std::env;
+use tempfile;
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Update to the specified version or the latest version if none is provided
+    Update { version: Option<String> },
+    /// Verify artifacts for the specified version
+    Verify { version: String },
+    /// Rollback to the specified version
+    Rollback { version: String },
+    /// Check the current status of the application
+    Status,
+    /// Delegate to node command implementation
+    Node {
+        #[command(subcommand)]
+        command: NodeCommands,
+    },
+    /// Delegate to topic command implementation
+    Topic {
+        #[command(subcommand)]
+        command: TopicCommands,
+    },
+}
+
+impl Commands {
+    pub fn execute(self) -> Result<()> {
+        match self {
+            Commands::Update { version } => {
+                let target_version = version.unwrap_or_else(|| Config::DEFAULT_VERSION.to_string());
+                tracing::info!("Updating to version: {}", target_version);
+
+                let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
+                let data_dir = Config::data_dir();
+
+                tracing::debug!("Data dir exists: {}", data_dir.exists());
+                tracing::debug!("Current user: {:?}", std::env::var("USER"));
+
+                // Create data directory if it doesn't exist
+                std::fs::create_dir_all(&data_dir)?;
+
+                tracing::info!("Using data_dir: {}", data_dir.display());
+
+                let fs_service = FileService::new(data_dir);
+
+                // Verify permissions before starting
+                fs_service.verify_permissions()?;
+
+                // Strip the 'v' prefix if it exists when constructing paths
+                let normalized_version = target_version.trim_start_matches('v');
+
+                // Verify version exists
+                if !gcs.verify_version(normalized_version)? {
+                    anyhow::bail!("Version {} not found", target_version);
+                }
+
+                // Create temp directory and download release bundle
+                let temp_dir = tempfile::tempdir()?;
+                let bundle_path = temp_dir.path().join(Config::RELEASE_BUNDLE_NAME);
+
+                tracing::info!("Downloading release bundle to: {}", bundle_path.display());
+                gcs.download_release_bundle(normalized_version, &bundle_path)?;
+
+                // Extract and update files
+                fs_service.update_files(&bundle_path)?;
+
+                tracing::info!("Update completed successfully!");
+                Ok(())
+            }
+            Commands::Verify { version } => {
+                tracing::info!("Verifying artifacts for version: {}", version);
+
+                let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
+
+                if !gcs.verify_version(&version)? {
+                    anyhow::bail!("Version {} not found", version);
+                }
+
+                tracing::info!("Verification completed successfully!");
+                Ok(())
+            }
+            Commands::Rollback { version: _ } => {
+                // tracing::info!("Rolling back to version: {}", version);
+
+                // let fs_service = FileService::new(data_dir);
+
+                // fs_service.rollback_to_version(&version)?;
+                tracing::info!("Rollback completed successfully!");
+                Ok(())
+            }
+            Commands::Status => {
+                tracing::info!("Checking application status");
+
+                // Example implementation for status
+                let current_version =
+                    env::var("GEIST_CURRENT_VERSION").unwrap_or_else(|_| "unknown".to_string());
+                tracing::info!("Current version: {}", current_version);
+
+                println!("Current version: {}", current_version);
+                Ok(())
+            }
+            Commands::Node { command } => command.execute(),
+            Commands::Topic { command } => command.execute(),
+        }
+    }
+}
