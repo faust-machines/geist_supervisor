@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 pub mod cli;
+pub mod config;
 pub mod services;
 pub mod utils;
 

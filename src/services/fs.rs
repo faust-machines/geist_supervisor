@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use fs_extra::dir::copy as copy_dir;
 use fs_extra::dir::CopyOptions;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile;
@@ -133,6 +134,21 @@ impl FileService {
         self.update_app(&release_dir)?;
 
         info!("Rollback to version {} completed successfully!", version);
+        Ok(())
+    }
+
+    pub fn update_binary(&self, binary_path: &Path) -> Result<()> {
+        info!("Updating binary...");
+
+        let target_path = self.bin_dir.join("roc_camera");
+        fs::copy(binary_path, &target_path).context("Failed to update roc_camera binary")?;
+
+        // Make binary executable
+        let mut perms = fs::metadata(&target_path)?.permissions();
+        perms.set_mode(0o755); // rwxr-xr-x
+        fs::set_permissions(&target_path, perms)?;
+
+        info!("Updated roc_camera binary at: {}", target_path.display());
         Ok(())
     }
 }

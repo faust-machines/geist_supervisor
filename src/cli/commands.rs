@@ -1,7 +1,8 @@
 use crate::cli::node::NodeCommands;
 use crate::cli::topic::TopicCommands;
+use crate::config::Config;
 use crate::services::FileService;
-use crate::services::GitHubService;
+use crate::services::GcsService;
 use anyhow::Context;
 use anyhow::Result;
 use clap::Subcommand;
@@ -35,22 +36,13 @@ impl Commands {
     pub fn execute(self) -> Result<()> {
         match self {
             Commands::Update { version } => {
-                // Get the target version or default to "latest"
-                let target_version = version.unwrap_or_else(|| "latest".to_string());
+                let target_version = version.unwrap_or_else(|| Config::DEFAULT_VERSION.to_string());
                 tracing::info!("Updating to version: {}", target_version);
 
-                // Initialize services
-                let github_token = env::var("GITHUB_TOKEN")
-                    .context("GITHUB_TOKEN environment variable not set")?;
-                let github = GitHubService::new(github_token);
+                let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
 
-                // Get paths from environment variables or use defaults
-                let bin_dir = env::var("GEIST_BIN_DIR")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| PathBuf::from("/usr/local/bin"));
-                let app_dir = env::var("GEIST_APP_DIR")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| PathBuf::from("/opt/roc_camera_app"));
+                let bin_dir = Config::bin_dir();
+                let app_dir = Config::app_dir();
 
                 tracing::info!("Using bin_dir: {}", bin_dir.display());
                 tracing::info!("Using app_dir: {}", app_dir.display());
@@ -60,24 +52,20 @@ impl Commands {
                 // Verify permissions before starting
                 fs_service.verify_permissions()?;
 
-                // Verify release exists
-                if !github.verify_release(&target_version)? {
-                    anyhow::bail!("Release {} not found", target_version);
+                // Verify version exists
+                if !gcs.verify_version(&target_version)? {
+                    anyhow::bail!("Version {} not found", target_version);
                 }
 
-                // Create temp directory and download bundle
+                // Create temp directory and download binary
                 let temp_dir = tempfile::tempdir()?;
-                let bundle_path = temp_dir
-                    .path()
-                    .join(format!("release_bundle-{}.tar.gz", target_version));
+                let binary_path = temp_dir.path().join("roc_camera");
 
-                tracing::info!("Downloading release bundle to: {}", bundle_path.display());
-                github.download_release_bundle(&target_version, &bundle_path)?;
+                tracing::info!("Downloading binary to: {}", binary_path.display());
+                gcs.download_binary(&target_version, &binary_path)?;
 
-                // Extract and update
-                let release_dir = fs_service.extract_bundle(&bundle_path, temp_dir.path())?;
-                fs_service.update_binaries(&release_dir)?;
-                fs_service.update_app(&release_dir)?;
+                // Update binary
+                fs_service.update_binary(&binary_path)?;
 
                 tracing::info!("Update completed successfully!");
                 Ok(())
@@ -85,14 +73,10 @@ impl Commands {
             Commands::Verify { version } => {
                 tracing::info!("Verifying artifacts for version: {}", version);
 
-                // Example implementation for verifying
-                // Verify the version exists and is functional
-                let github_token = env::var("GITHUB_TOKEN")
-                    .context("GITHUB_TOKEN environment variable not set")?;
-                let github = GitHubService::new(github_token);
+                let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
 
-                if !github.verify_release(&version)? {
-                    anyhow::bail!("Release {} not found", version);
+                if !gcs.verify_version(&version)? {
+                    anyhow::bail!("Version {} not found", version);
                 }
 
                 tracing::info!("Verification completed successfully!");
