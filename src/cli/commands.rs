@@ -6,7 +6,6 @@ use crate::services::GcsService;
 use anyhow::Result;
 use clap::Subcommand;
 use std::env;
-use std::path::PathBuf;
 use tempfile;
 
 #[derive(Subcommand)]
@@ -87,7 +86,7 @@ impl Commands {
                 tracing::info!("Verification completed successfully!");
                 Ok(())
             }
-            Commands::Rollback { version } => {
+            Commands::Rollback { version: _ } => {
                 // tracing::info!("Rolling back to version: {}", version);
 
                 // let fs_service = FileService::new(data_dir);

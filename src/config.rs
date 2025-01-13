@@ -21,7 +21,7 @@ impl Config {
                 tracing::error!("Error creating data directory: {}", e);
                 tracing::error!(
                     "Current permissions: {:?}",
-                    fs::metadata(&dir.parent().unwrap())
+                    fs::metadata(dir.parent().unwrap())
                 );
                 panic!("Failed to create data directory: {}", e);
             }
