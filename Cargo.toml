@@ -1,12 +1,12 @@
 [package]
 name = "geist_supervisor"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "geist_supervisor"
 license = "MIT"
 documentation = "https://docs.roc.camera"
 homepage = "https://roc.camera"
-repository = "https://github.com/faust-machines/geist_supervisor"
+repository = "https://github.com/faust-machines/roc_supervisor"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
