@@ -116,8 +116,8 @@ impl GcsService {
         let normalized_version = Config::normalize_version(version);
 
         let url = format!(
-            "{}/releases/{}/release_bundle-v{}.tar.gz",
-            self.registry_path, normalized_version, normalized_version
+            "{}/releases/{}/release_bundle-{}.tar.gz",
+            self.registry_path, normalized_version, version
         );
 
         tracing::debug!("Attempting to download from URL: {}", url);
