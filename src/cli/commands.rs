@@ -41,16 +41,17 @@ impl Commands {
 
                 let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
                 let data_dir = Config::data_dir();
+                let data_dir_path = data_dir.as_path();
 
                 tracing::debug!("Data dir exists: {}", data_dir.exists());
                 tracing::debug!("Current user: {:?}", std::env::var("USER"));
 
                 // Create data directory if it doesn't exist
                 std::fs::create_dir_all(&data_dir)?;
+                let data_dir_display = data_dir.display();
+                tracing::info!("Using data_dir: {}", data_dir_display);
 
-                tracing::info!("Using data_dir: {}", data_dir.display());
-
-                let fs_service = FileService::new(data_dir);
+                let fs_service = FileService::new(data_dir.clone());
 
                 // Verify permissions before starting
                 fs_service.verify_permissions()?;
@@ -72,6 +73,18 @@ impl Commands {
 
                 // Extract and update files
                 fs_service.update_files(&bundle_path)?;
+
+                // Ensure the extracted files are placed correctly
+                let release_bundle_dir = temp_dir.path().join("release_bundle");
+                let manifest_path = release_bundle_dir.join("manifest.yaml");
+                let binary_path = release_bundle_dir.join("roc_camera");
+                let assets_dir = release_bundle_dir.join("roc_camera_app");
+
+                // Example logic to move files to the correct location
+                std::fs::copy(&binary_path, &data_dir_path.join("roc_camera"))?;
+                std::fs::create_dir_all(&data_dir_path.join("roc_camera_app"))?;
+                std::fs::copy(&manifest_path, &data_dir_path.join("manifest.yaml"))?;
+                std::fs::rename(&assets_dir, data_dir_path.join("roc_camera_app"))?;
 
                 tracing::info!("Update completed successfully!");
                 Ok(())
@@ -118,9 +131,9 @@ impl Commands {
                 let status = std::process::Command::new("flutter-pi")
                     .arg("--release")
                     .arg(format!(
-                        "{}/flutter_assets",
+                        "{}/roc_camera_app",
                         env::var("PROJECTS_DIR")
-                            .unwrap_or_else(|_| "~/projects/roc_camera/roc_camera_app".to_string())
+                            .unwrap_or_else(|_| "~/.local/share/roc-supervisor".to_string())
                     ))
                     .status();
 
