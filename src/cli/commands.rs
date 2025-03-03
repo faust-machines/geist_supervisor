@@ -28,6 +28,8 @@ pub enum Commands {
         #[command(subcommand)]
         command: TopicCommands,
     },
+    /// Run the application with the specified version or the default version if none is provided
+    Run { version: Option<String> },
 }
 
 impl Commands {
@@ -108,6 +110,35 @@ impl Commands {
             }
             Commands::Node { command } => command.execute(),
             Commands::Topic { command } => command.execute(),
+            Commands::Run { version } => {
+                let run_version = version.unwrap_or_else(|| Config::DEFAULT_VERSION.to_string());
+                tracing::info!("Running application with version: {}", run_version);
+
+                // Construct the command to run
+                let status = std::process::Command::new("flutter-pi")
+                    .arg("--release")
+                    .arg(format!(
+                        "{}/flutter_assets",
+                        env::var("PROJECTS_DIR")
+                            .unwrap_or_else(|_| "~/projects/roc_camera/roc_camera_app".to_string())
+                    ))
+                    .status();
+
+                match status {
+                    Ok(status) if status.success() => {
+                        tracing::info!("Run completed successfully!");
+                        Ok(())
+                    }
+                    Ok(status) => {
+                        tracing::error!("Run failed with exit code: {}", status);
+                        anyhow::bail!("Run failed with exit code: {}", status);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to execute run command: {}", e);
+                        Err(e.into())
+                    }
+                }
+            }
         }
     }
 }
