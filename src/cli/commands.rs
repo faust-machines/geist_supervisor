@@ -6,7 +6,6 @@ use crate::services::GcsService;
 use anyhow::Result;
 use clap::Subcommand;
 use std::env;
-use std::path::Path;
 use tempfile;
 
 #[derive(Subcommand)]
@@ -67,149 +66,12 @@ impl Commands {
                 // Extract and update files
                 tracing::info!("Extracting release bundle from: {}", bundle_path.display());
 
-                // Create the release bundle directory
-                let release_bundle_dir = temp_dir.path().join("release_bundle");
-                std::fs::create_dir_all(&release_bundle_dir)?;
+                // Use the new extract_bundle_with_details method
+                let release_bundle_dir =
+                    fs_service.extract_bundle_with_details(&bundle_path, temp_dir.path())?;
 
-                // Check if the bundle file exists and log its size
-                if bundle_path.exists() {
-                    let metadata = std::fs::metadata(&bundle_path)?;
-                    tracing::info!("Bundle file exists, size: {} bytes", metadata.len());
-                } else {
-                    tracing::error!("Bundle file does not exist: {}", bundle_path.display());
-                    anyhow::bail!("Bundle file does not exist: {}", bundle_path.display());
-                }
-
-                // List the contents of the tarball before extraction
-                tracing::info!("Listing contents of the tarball:");
-                let list_output = std::process::Command::new("tar")
-                    .arg("-tvf")
-                    .arg(&bundle_path)
-                    .output()?;
-
-                if list_output.status.success() {
-                    let stdout = String::from_utf8_lossy(&list_output.stdout);
-                    tracing::info!("Tarball contents:\n{}", stdout);
-                } else {
-                    let stderr = String::from_utf8_lossy(&list_output.stderr);
-                    tracing::error!("Failed to list tarball contents: {}", stderr);
-                }
-
-                // Extract the tarball directly to the release_bundle_dir
-                tracing::info!("Extracting tarball to: {}", release_bundle_dir.display());
-                let output = std::process::Command::new("tar")
-                    .arg("-xzf")
-                    .arg(&bundle_path)
-                    .arg("-C")
-                    .arg(&release_bundle_dir)
-                    .output()?;
-
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    tracing::error!("Failed to extract tarball: {}", stderr);
-                    anyhow::bail!("Failed to extract tarball: {}", stderr);
-                }
-
-                // List the contents of the extracted directory for debugging
-                tracing::info!("Contents of release_bundle_dir:");
-
-                // Define a recursive function to walk directories
-                fn walk_directory(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
-                    let mut files = Vec::new();
-                    if dir.exists() && dir.is_dir() {
-                        for entry in std::fs::read_dir(dir)? {
-                            let entry = entry?;
-                            let path = entry.path();
-                            tracing::info!("  {}", path.display());
-                            files.push(path.clone());
-
-                            if path.is_dir() {
-                                let subdir_files = walk_directory(&path)?;
-                                files.extend(subdir_files);
-                            }
-                        }
-                    }
-                    Ok(files)
-                }
-
-                // Walk the release bundle directory and get all files
-                let found_files = walk_directory(&release_bundle_dir)?;
-
-                // Try to find the binary and other required files in the extracted contents
-                let mut binary_path = None;
-                let mut manifest_path = None;
-                let mut assets_dir = None;
-
-                for path in &found_files {
-                    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-                    if file_name == "roc_camera" {
-                        binary_path = Some(path.clone());
-                    } else if file_name == "manifest.yaml" {
-                        manifest_path = Some(path.clone());
-                    } else if file_name == "roc_camera_app" && path.is_dir() {
-                        assets_dir = Some(path.clone());
-                    }
-                }
-
-                // Use the found paths or default to the expected locations
-                let binary_path =
-                    binary_path.unwrap_or_else(|| release_bundle_dir.join("roc_camera"));
-                let manifest_path =
-                    manifest_path.unwrap_or_else(|| release_bundle_dir.join("manifest.yaml"));
-                let assets_dir =
-                    assets_dir.unwrap_or_else(|| release_bundle_dir.join("roc_camera_app"));
-
-                tracing::info!("Using binary path: {}", binary_path.display());
-                tracing::info!("Using manifest path: {}", manifest_path.display());
-                tracing::info!("Using assets directory: {}", assets_dir.display());
-
-                // Check if the files exist
-                if !binary_path.exists() {
-                    tracing::error!("Binary path does not exist: {}", binary_path.display());
-                    anyhow::bail!("Binary path does not exist: {}", binary_path.display());
-                }
-
-                if !manifest_path.exists() {
-                    tracing::error!("Manifest path does not exist: {}", manifest_path.display());
-                    anyhow::bail!("Manifest path does not exist: {}", manifest_path.display());
-                }
-
-                if !assets_dir.exists() {
-                    tracing::error!("Assets directory does not exist: {}", assets_dir.display());
-                    anyhow::bail!("Assets directory does not exist: {}", assets_dir.display());
-                }
-
-                // Create version directory in data_dir
-                let version_dir = data_dir.join(target_version.as_str());
-                tracing::info!("Installing to version directory: {}", version_dir.display());
-
-                // Remove existing directory if it exists to avoid "Directory not empty" error
-                if version_dir.exists() {
-                    tracing::info!(
-                        "Removing existing version directory: {}",
-                        version_dir.display()
-                    );
-                    std::fs::remove_dir_all(&version_dir)?;
-                }
-
-                // Create the version directory
-                std::fs::create_dir_all(&version_dir)?;
-
-                // Copy files to the version directory
-                let dest_binary = version_dir.join("roc_camera");
-                let dest_manifest = version_dir.join("manifest.yaml");
-                let dest_assets = version_dir.join("roc_camera_app");
-
-                tracing::info!("Copying binary to: {}", dest_binary.display());
-                std::fs::copy(&binary_path, &dest_binary)?;
-
-                tracing::info!("Copying manifest to: {}", dest_manifest.display());
-                std::fs::copy(&manifest_path, &dest_manifest)?;
-
-                tracing::info!("Copying assets to: {}", dest_assets.display());
-                copy_dir_all(&assets_dir, &dest_assets)?;
-
-                tracing::info!("Successfully installed version: {}", target_version);
+                // Install the version
+                fs_service.install_version(&release_bundle_dir, target_version.as_str())?;
 
                 Ok(())
             }
@@ -337,22 +199,4 @@ impl Commands {
             }
         }
     }
-}
-
-// Helper function to recursively copy directories
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-
-        if ty.is_dir() {
-            copy_dir_all(&src_path, &dst_path)?;
-        } else {
-            std::fs::copy(&src_path, &dst_path)?;
-        }
-    }
-    Ok(())
 }
