@@ -41,15 +41,7 @@ impl Commands {
 
                 let gcs = GcsService::new(String::new(), Config::REGISTRY_BASE_URL.to_string());
                 let data_dir = Config::data_dir();
-                let data_dir_path = data_dir.as_path();
-
-                tracing::debug!("Data dir exists: {}", data_dir.exists());
-                tracing::debug!("Current user: {:?}", std::env::var("USER"));
-
-                // Create data directory if it doesn't exist
-                std::fs::create_dir_all(&data_dir)?;
-                let data_dir_display = data_dir.display();
-                tracing::info!("Using data_dir: {}", data_dir_display);
+                tracing::info!("Using data_dir: {}", data_dir.display());
 
                 let fs_service = FileService::new(data_dir.clone());
 
@@ -72,21 +64,15 @@ impl Commands {
                 gcs.download_release_bundle(normalized_version, &bundle_path)?;
 
                 // Extract and update files
-                fs_service.update_files(&bundle_path)?;
+                tracing::info!("Extracting release bundle from: {}", bundle_path.display());
 
-                // Ensure the extracted files are placed correctly
-                let release_bundle_dir = temp_dir.path().join("release_bundle");
-                let manifest_path = release_bundle_dir.join("manifest.yaml");
-                let binary_path = release_bundle_dir.join("roc_camera");
-                let assets_dir = release_bundle_dir.join("roc_camera_app");
+                // Use the new extract_bundle_with_details method
+                let release_bundle_dir =
+                    fs_service.extract_bundle_with_details(&bundle_path, temp_dir.path())?;
 
-                // Example logic to move files to the correct location
-                std::fs::copy(&binary_path, &data_dir_path.join("roc_camera"))?;
-                std::fs::create_dir_all(&data_dir_path.join("roc_camera_app"))?;
-                std::fs::copy(&manifest_path, &data_dir_path.join("manifest.yaml"))?;
-                std::fs::rename(&assets_dir, data_dir_path.join("roc_camera_app"))?;
+                // Install the version
+                fs_service.install_version(&release_bundle_dir, target_version.as_str())?;
 
-                tracing::info!("Update completed successfully!");
                 Ok(())
             }
             Commands::Verify { version } => {
@@ -124,33 +110,92 @@ impl Commands {
             Commands::Node { command } => command.execute(),
             Commands::Topic { command } => command.execute(),
             Commands::Run { version } => {
-                let run_version = version.unwrap_or_else(|| Config::DEFAULT_VERSION.to_string());
-                tracing::info!("Running application with version: {}", run_version);
+                let data_dir = Config::data_dir();
 
-                // Construct the command to run
-                let status = std::process::Command::new("flutter-pi")
-                    .arg("--release")
-                    .arg(format!(
-                        "{}/roc_camera_app",
-                        env::var("PROJECTS_DIR")
-                            .unwrap_or_else(|_| "~/.local/share/roc-supervisor".to_string())
-                    ))
-                    .status();
+                // Determine which version to run
+                let target_version = match version {
+                    Some(v) => v,
+                    None => {
+                        // Find the latest version in the data directory
+                        let mut versions = Vec::new();
+                        for entry in std::fs::read_dir(&data_dir)? {
+                            let entry = entry?;
+                            if entry.file_type()?.is_dir() {
+                                if let Some(name) = entry.file_name().to_str() {
+                                    if name.starts_with('v') {
+                                        versions.push(name.to_string());
+                                    }
+                                }
+                            }
+                        }
 
-                match status {
-                    Ok(status) if status.success() => {
-                        tracing::info!("Run completed successfully!");
-                        Ok(())
+                        if versions.is_empty() {
+                            anyhow::bail!("No versions found. Please run 'update' first.");
+                        }
+
+                        // Sort versions to find the latest
+                        versions.sort();
+                        versions.last().unwrap().clone()
                     }
-                    Ok(status) => {
-                        tracing::error!("Run failed with exit code: {}", status);
-                        anyhow::bail!("Run failed with exit code: {}", status);
+                };
+
+                tracing::info!("Running version: {}", target_version);
+
+                // Check if the version exists
+                let version_dir = data_dir.join(&target_version);
+                if !version_dir.exists() {
+                    anyhow::bail!(
+                        "Version {} not found. Please run 'update {}' first.",
+                        target_version,
+                        target_version
+                    );
+                }
+
+                // Find the binary
+                let binary_path = version_dir.join("roc_camera");
+                if !binary_path.exists() {
+                    anyhow::bail!("Binary not found for version {}", target_version);
+                }
+
+                // Check if running on Raspberry Pi
+                #[cfg(target_arch = "arm")]
+                {
+                    // Make sure the binary is executable
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mut perms = std::fs::metadata(&binary_path)?.permissions();
+                        perms.set_mode(0o755);
+                        std::fs::set_permissions(&binary_path, perms)?;
                     }
-                    Err(e) => {
-                        tracing::error!("Failed to execute run command: {}", e);
-                        Err(e.into())
+
+                    // Run the binary
+                    tracing::info!("Executing binary: {}", binary_path.display());
+                    let status = std::process::Command::new(&binary_path)
+                        .current_dir(&version_dir) // Run from the version directory
+                        .status()?;
+
+                    if !status.success() {
+                        anyhow::bail!("Process exited with status: {}", status);
                     }
                 }
+
+                // If not on Raspberry Pi, show a message
+                #[cfg(not(target_arch = "arm"))]
+                {
+                    tracing::info!("Binary is compiled for Raspberry Pi and cannot be executed on this system.");
+                    tracing::info!(
+                        "The application has been successfully installed at: {}",
+                        version_dir.display()
+                    );
+                    tracing::info!("To run the application, transfer the files to a Raspberry Pi and execute the 'roc_camera' binary.");
+
+                    // Print the command that would be executed on a Raspberry Pi
+                    tracing::info!("On a Raspberry Pi, the following command would be executed:");
+                    tracing::info!("cd {} && ./roc_camera", version_dir.display());
+                }
+
+                Ok(())
             }
         }
     }
