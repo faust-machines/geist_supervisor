@@ -23,6 +23,10 @@ tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
+[features]
+default = []
+verbose_logging = []  # Feature to enable more verbose logging
+
 [[bin]]
 name = "geist"
 path = "src/main.rs"

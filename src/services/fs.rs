@@ -48,7 +48,7 @@ impl FileService {
 
         // Check if the bundle file exists and log its size
         if bundle_path.exists() {
-            let metadata = fs::metadata(&bundle_path)?;
+            let metadata = fs::metadata(bundle_path)?;
             info!("Bundle file exists, size: {} bytes", metadata.len());
         } else {
             return Err(anyhow::anyhow!(
@@ -59,7 +59,7 @@ impl FileService {
 
         // List the contents of the tarball before extraction
         info!("Listing contents of the tarball:");
-        let list_output = Command::new("tar").arg("-tvf").arg(&bundle_path).output()?;
+        let list_output = Command::new("tar").arg("-tvf").arg(bundle_path).output()?;
 
         if list_output.status.success() {
             let stdout = String::from_utf8_lossy(&list_output.stdout);
@@ -73,7 +73,7 @@ impl FileService {
         info!("Extracting tarball to: {}", release_bundle_dir.display());
         let output = Command::new("tar")
             .arg("-xzf")
-            .arg(&bundle_path)
+            .arg(bundle_path)
             .arg("-C")
             .arg(&release_bundle_dir)
             .output()?;
@@ -101,7 +101,26 @@ impl FileService {
                 files.push(path.clone());
 
                 if path.is_dir() {
-                    let subdir_files = self.walk_directory(&path)?;
+                    let subdir_files = FileService::walk_directory_static(path.as_path())?;
+                    files.extend(subdir_files);
+                }
+            }
+        }
+        Ok(files)
+    }
+
+    // Static version of walk_directory to avoid self parameter
+    fn walk_directory_static(dir: &Path) -> Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+        if dir.exists() && dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                info!("  {}", path.display());
+                files.push(path.clone());
+
+                if path.is_dir() {
+                    let subdir_files = FileService::walk_directory_static(path.as_path())?;
                     files.extend(subdir_files);
                 }
             }
@@ -119,7 +138,25 @@ impl FileService {
             let dst_path = dst.join(entry.file_name());
 
             if ty.is_dir() {
-                self.copy_dir_all(&src_path, &dst_path)?;
+                FileService::copy_dir_all_static(&src_path, &dst_path)?;
+            } else {
+                fs::copy(&src_path, &dst_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    // Static version of copy_dir_all to avoid self parameter
+    fn copy_dir_all_static(src: &Path, dst: &Path) -> Result<()> {
+        fs::create_dir_all(dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let ty = entry.file_type()?;
+            let src_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+
+            if ty.is_dir() {
+                FileService::copy_dir_all_static(&src_path, &dst_path)?;
             } else {
                 fs::copy(&src_path, &dst_path)?;
             }
