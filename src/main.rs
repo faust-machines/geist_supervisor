@@ -8,6 +8,8 @@ pub mod utils;
 
 use cli::Cli;
 
+const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 fn main() -> Result<()> {
     // Set default log level if not already set
     if env::var("RUST_LOG").is_err() {
@@ -17,7 +19,7 @@ fn main() -> Result<()> {
     // Initialize logging
     utils::logging::init_logging();
 
-    tracing::info!("Starting Roc Supervisor");
+    tracing::info!("Starting Geist Supervisor v{}", PKG_VERSION);
     let cli = Cli::parse();
     cli.execute()
 }

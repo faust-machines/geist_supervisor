@@ -6,6 +6,9 @@ use std::path::PathBuf;
 pub struct Config;
 
 impl Config {
+    // Application version from Cargo.toml
+    pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
     // GCS (Google Cloud Storage) settings
     pub const REGISTRY_BASE_URL: &'static str =
         "https://storage.googleapis.com/roc-camera-releases";
@@ -56,7 +59,7 @@ impl Config {
         let version_file = Self::data_dir().join(Self::CURRENT_VERSION_FILE);
         match fs::read_to_string(version_file) {
             Ok(version) => version.trim().to_string(),
-            Err(_) => "unknown".to_string(),
+            Err(_) => format!("v{}", Self::PKG_VERSION), // Default to package version if no version file
         }
     }
 
