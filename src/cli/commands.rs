@@ -5,7 +5,6 @@ use crate::services::FileService;
 use crate::services::GcsService;
 use anyhow::Result;
 use clap::Subcommand;
-use std::env;
 use tempfile;
 
 #[derive(Subcommand)]
@@ -73,6 +72,13 @@ impl Commands {
                 // Install the version
                 fs_service.install_version(&release_bundle_dir, target_version.as_str())?;
 
+                // Set as current version
+                if let Err(e) = Config::set_current_version(&target_version) {
+                    tracing::warn!("Failed to set current version: {}", e);
+                } else {
+                    tracing::info!("Set current version to: {}", target_version);
+                }
+
                 Ok(())
             }
             Commands::Verify { version } => {
@@ -99,9 +105,8 @@ impl Commands {
             Commands::Status => {
                 tracing::info!("Checking application status");
 
-                // Example implementation for status
-                let current_version =
-                    env::var("GEIST_CURRENT_VERSION").unwrap_or_else(|_| "unknown".to_string());
+                // Get the current version using our new function
+                let current_version = Config::get_current_version();
                 tracing::info!("Current version: {}", current_version);
 
                 println!("Current version: {}", current_version);
@@ -151,6 +156,11 @@ impl Commands {
                     );
                 }
 
+                // Record this as the current version
+                if let Err(e) = Config::set_current_version(&target_version) {
+                    tracing::warn!("Failed to set current version: {}", e);
+                }
+
                 // Find the binary
                 let binary_path = version_dir.join("roc_camera");
                 if !binary_path.exists() {
@@ -169,11 +179,42 @@ impl Commands {
                         std::fs::set_permissions(&binary_path, perms)?;
                     }
 
+                    // Use the actual assets in the data directory instead of creating symlinks
+                    let flutter_assets_path = version_dir.join("roc_camera_app");
+
+                    if !flutter_assets_path.exists() {
+                        tracing::error!(
+                            "Flutter assets directory doesn't exist at: {}",
+                            flutter_assets_path.display()
+                        );
+                        return Err(anyhow::anyhow!("Flutter assets directory not found"));
+                    }
+
+                    tracing::info!(
+                        "Using Flutter assets from: {}",
+                        flutter_assets_path.display()
+                    );
+
                     // Run the binary
                     tracing::info!("Executing binary: {}", binary_path.display());
-                    let status = std::process::Command::new(&binary_path)
-                        .current_dir(&version_dir) // Run from the version directory
-                        .status()?;
+                    let mut command = std::process::Command::new(&binary_path);
+
+                    // Set current directory to the version directory
+                    command.current_dir(&version_dir);
+
+                    // Add environment variables that point to the actual assets location
+                    command.env("FLUTTER_ASSETS_DIR", &flutter_assets_path);
+                    command.env("FLUTTER_ASSET_DIR", &flutter_assets_path);
+                    command.env("FLUTTER_BUNDLE_DIR", &flutter_assets_path);
+                    command.env("FLUTTER_APP_DIR", &flutter_assets_path);
+                    command.env("FLUTTER_PI_APP_DIR", &flutter_assets_path);
+                    command.env("APP_DIR", &flutter_assets_path);
+
+                    // Pass the flutter assets directory as a command-line argument
+                    command.arg("--flutter-assets-dir");
+                    command.arg(&flutter_assets_path);
+
+                    let status = command.status()?;
 
                     if !status.success() {
                         anyhow::bail!("Process exited with status: {}", status);

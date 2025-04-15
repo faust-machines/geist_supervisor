@@ -5,20 +5,28 @@ pub mod commands;
 pub mod node;
 pub mod topic;
 
+use commands::Commands;
+
 #[derive(Parser)]
 #[command(
     author,
     version,
-    about = "Roc Supervisor CLI - Manage and control your Roc Camera",
+    about = "Geist Supervisor CLI - Manage and control your Geist Camera",
     long_about = None
 )]
 pub struct Cli {
     #[command(subcommand)]
-    command: commands::Commands,
+    command: Option<Commands>,
 }
 
 impl Cli {
     pub fn execute(self) -> Result<()> {
-        self.command.execute()
+        match self.command {
+            Some(cmd) => cmd.execute(),
+            None => {
+                println!("No command specified. Use --help for usage information.");
+                Ok(())
+            }
+        }
     }
 }

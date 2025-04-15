@@ -1,12 +1,12 @@
 [package]
 name = "geist_supervisor"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
-description = "geist_supervisor"
+description = "Geist Supervisor - Management tool for Roc Camera"
 license = "MIT"
 documentation = "https://docs.roc.camera"
 homepage = "https://roc.camera"
-repository = "https://github.com/faust-machines/roc_supervisor"
+repository = "https://github.com/faust-machines/geist_supervisor"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -22,6 +22,10 @@ tempfile = "3.14.0"
 tracing = "0.1.41"
 tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
+[features]
+default = []
+verbose_logging = []  # Feature to enable more verbose logging
 
 [[bin]]
 name = "geist"
